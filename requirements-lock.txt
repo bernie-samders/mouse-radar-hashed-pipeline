@@ -1,0 +1,6 @@
+# Environment the locked release v1.7.0 was verified in: Python 3.12.10 (Windows 10, AMD64)
+numpy==2.3.5
+scipy==1.16.3
+numba==0.66.0
+llvmlite==0.48.0
+matplotlib==3.10.7

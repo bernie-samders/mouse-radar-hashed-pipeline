@@ -1,0 +1,6 @@
+# created when the pipeline runs
+__pycache__/
+*.pyc
+*.nbi
+*.nbc
+outputs/

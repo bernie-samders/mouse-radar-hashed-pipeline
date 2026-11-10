@@ -1,0 +1,5 @@
+# Python 3.9+  (tested on the lab's existing environment)
+numpy>=1.21
+scipy>=1.7
+numba>=0.56        # JIT for the DP hot loops (engine/fast_dp.py, engine/beatseg.py)
+matplotlib>=3.4    # only for the figures (pause histogram, apnea + heart-rate PNGs); metrics still compute without it

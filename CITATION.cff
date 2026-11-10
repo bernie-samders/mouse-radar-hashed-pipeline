@@ -1,0 +1,24 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+type: software
+title: "mouse_radar_pipeline: breathing, apnea and heart rate of freely behaving mice from mm-wave radar"
+version: 1.7.0
+date-released: "2026-11-10"
+license: MIT
+repository-code: "https://github.com/bernie-samders/mouse-radar-hashed-pipeline"
+authors:
+  - family-names: "Ihns"
+    given-names: "Sam"
+    orcid: "https://orcid.org/0009-0004-4830-2953"
+abstract: >-
+  Locked release (v1.7.0) of the radar analysis pipeline: two-template breath segmentation, Stettner breathing
+  metrics, pause distribution, azimuth motion, apneas validated against whole-body plethysmography, and ECG-free heart
+  rate and beat-to-beat heart rate validated against implanted ECG. Every file is listed with its SHA-256 in
+  MANIFEST.sha256; run verify_lock.py to check a copy.
+keywords:
+  - radar
+  - respiration
+  - apnea
+  - heart rate
+  - mouse
+  - Rett syndrome
