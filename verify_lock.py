@@ -12,9 +12,9 @@ import hashlib
 import os
 import sys
 
-VERSION = "1.7.0"
+VERSION = "1.8.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
-IGNORE_DIRS = {".git", "__pycache__", "outputs", "hr_work", "b2b_work", "dejumped"}
+IGNORE_DIRS = {".git", "__pycache__", "outputs", "hr_work", "b2b_work", "hr_curve_work", "dejumped"}
 IGNORE_EXT = {".pyc", ".pyo", ".nbi", ".nbc"}
 
 
@@ -27,10 +27,11 @@ def sha256(path):
 
 
 def frozen_constants():
-    """The validated research-file hashes the pipeline itself checks at run time (pipelines/hr.py, b2b.py)."""
+    """The validated research-file hashes the pipeline itself checks at run time (pipelines/hr.py, b2b.py, hr_curve.py)."""
     out = {}
     for rel, name, base in (("pipelines/hr.py", "FROZEN_SHA256", "engine/hr_final_pipeline.py"),
-                            ("pipelines/b2b.py", "FROZEN_SHA256", "engine/b2b_beats.py")):
+                            ("pipelines/b2b.py", "FROZEN_SHA256", "engine/b2b_beats.py"),
+                            ("pipelines/hr_curve.py", "FROZEN_SHA256", "engine/pll_tracker")):
         tree = ast.parse(open(os.path.join(HERE, rel), encoding="utf-8").read())
         for node in tree.body:
             if isinstance(node, ast.Assign) and any(getattr(t, "id", None) == name for t in node.targets):

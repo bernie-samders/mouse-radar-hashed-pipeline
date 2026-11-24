@@ -12,6 +12,12 @@ r"""run.py -- top-level driver for the mouse radar pipeline.
                            [--patch-beams A-B] [--min-period-s S] [--dejump auto|on|off]
     python run.py b2b      --rec <recording_name>  [--exp <raw_experiment_dir>] [--seg DIR] [--out DIR] [--workers N]
                            [--dejump auto|on|off]                     # after hr: beat-to-beat HR (B2B.md, new in 1.7)
+    python run.py rate     --rec <recording_name>  [--exp <raw_experiment_dir>] [--seg DIR] [--out DIR] [--workers N]
+                           [--dejump auto|on|off]      # after b2b: rate-level HR = beats, else the rate tracker
+                                                       # (RATE.md, new in 1.8)
+    python run.py hr_curve --rec <recording_name>  [--exp <raw_experiment_dir>] [--seg DIR] [--out DIR] [--workers N]
+                           [--band bspec|continuity] [--dejump auto|on|off]   # the rate tracker alone, on hr's periods
+                                                       # (HR_CURVE.md; not part of `all`: `rate` runs it)
     python run.py dejump   --exp <raw_experiment_dir> [--out DIR] [--bins hr|all|LO-HI] [--detect-only]
     python run.py combine  [--out DIR]        # merge every experiment's metric CSVs into master tables
     python run.py list                         # list registered pipelines
@@ -28,7 +34,7 @@ the fast bounds 0.12,0.21 s; the default-bounds one is kept in <out>/segments/de
 re-segment.
 
 July-2026 captures (new in 1.5, DEJUMP.md): that live-capture build steps every voxel at each 4.264 s capture file and
-can drop single frames, which buries the heart. With --dejump auto (the default), `all` / `hr` / `b2b` check the
+can drop single frames, which buries the heart. With --dejump auto (the default), `all` / `hr` / `b2b` / `rate` check the
 cube once and, when it has the file-step grid or dropouts, run the heart-rate steps on a repaired copy written to
 <out>/dejumped/ (`all` deletes it afterwards unless --keep-dejumped). Breathing / apnea / motion always use the raw cube.
 `on` = repair whenever any jump is found; `off` = never. `dejump` alone writes (or, --detect-only, just reports) a copy.
@@ -44,7 +50,7 @@ for _p in (os.path.join(_HERE, "engine"), os.path.join(_HERE, "pipelines"), _HER
 import segmentation as SEG
 import voxel_store as VS
 import dejump as DJ
-from pipelines import REGISTRY, PIPELINES, QC
+from pipelines import REGISTRY, PIPELINES, EXTRA, QC
 
 DEF_OUT = os.path.join(_HERE, "outputs")
 DJ_HELP = ("July-2026 capture-build jumps (DEJUMP.md): auto (default) = run the heart-rate steps on a repaired copy "
@@ -221,7 +227,7 @@ def cmd_dejump(exp, out_root, bins="hr", detect_only=False):
     json.dump(rep, open(os.path.join(met_dir, rec + ".dejump.json"), "w"), indent=1, default=float)
     if rep["repaired"]:
         print(f'-> run the heart-rate steps on the copy:  python run.py hr --rec {rec} --exp "{rep["out_dir"]}" '
-              f'--dejump off   (then the same for b2b)')
+              f'--dejump off   (then the same for b2b and rate)')
     return rep
 
 
@@ -231,7 +237,7 @@ def cmd_combine(out_root):
     suffixes = {"stettner": ".stettner.csv", "pauses": ".pauses.csv", "motion": ".motion.csv",
                 "apnea": ".apnea.csv", "apnea_events": ".apnea_events.csv", "hr": ".hr.csv",
                 "hr_periods": ".hr_periods.csv", "b2b": ".b2b.csv", "b2b_periods": ".b2b_periods.csv",
-                "qc": ".qc.csv", "dejump": ".dejump.csv"}
+                "rate": ".rate.csv", "rate_periods": ".rate_periods.csv", "qc": ".qc.csv", "dejump": ".dejump.csv"}
     for name, suf in suffixes.items():
         files = sorted(glob.glob(os.path.join(met_dir, "*" + suf)))
         if not files:
@@ -277,6 +283,9 @@ def main(argv=None):
             p.add_argument("--patch-beams", default=None, help="override the chest-patch beams, e.g. 6-15")
             p.add_argument("--min-period-s", type=float, default=None,
                            help="shortest still period scored (default 20 s = validated)")
+        if name == "hr_curve":
+            p.add_argument("--band", default=None, choices=("bspec", "continuity"),
+                           help="band centre per period: the hr step's (bspec, default) or continuity across periods")
         if getattr(REGISTRY[name], "DEJUMP", False):
             p.add_argument("--dejump", default="auto", choices=("auto", "on", "off"), help=DJ_HELP)
 
@@ -291,8 +300,9 @@ def main(argv=None):
     args = ap.parse_args(argv)
     if args.cmd == "list":
         print("registered pipelines:")
-        for m in PIPELINES + [QC]:
-            print(f"  {m.NAME:10s} [{m.KIND}]  {m.__doc__.splitlines()[0] if m.__doc__ else ''}")
+        for m in PIPELINES + [QC] + EXTRA:
+            print(f"  {m.NAME:10s} [{m.KIND}]  {m.__doc__.splitlines()[0] if m.__doc__ else ''}"
+                  + ("  (not part of `all`)" if m in EXTRA else ""))
         return 0
     if args.cmd == "all":
         cmd_all(args.exp, args.out, max_min=args.max_min, cohort=args.cohort, age_weeks=args.age_weeks,
@@ -308,7 +318,8 @@ def main(argv=None):
     if args.cmd in REGISTRY:
         cmd_one(args.cmd, rec=args.rec, exp=args.exp, out_root=args.out, seg=args.seg, max_min=args.max_min,
                 workers=getattr(args, "workers", None), patch_beams=getattr(args, "patch_beams", None),
-                min_period_s=getattr(args, "min_period_s", None), dejump=getattr(args, "dejump", None))
+                min_period_s=getattr(args, "min_period_s", None), band=getattr(args, "band", None),
+                dejump=getattr(args, "dejump", None))
         return 0
     ap.error(f"unknown command {args.cmd!r}")
 

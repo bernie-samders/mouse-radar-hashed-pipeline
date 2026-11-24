@@ -295,6 +295,11 @@ def assess(rec, out_dir=None):
               "hr_per_breath_median", "n_guard_seed", "n_guard_hr", "frozen_code_ok"):
         if k in bbm:
             signals["b2b_" + k] = bbm[k]
+    rtm = (_load_sibling(out_dir, rec, ".rate.json") or {}).get("metrics", {})      # informational, never a verdict
+    for k in ("hr_median_bpm", "covered_min", "beats_min", "curve_min", "covered_clean_frac", "n_periods", "n_used",
+              "n_guard_hr", "tracker_snr_verdict", "frozen_code_ok"):
+        if k in rtm:
+            signals["rate_" + k] = rtm[k]
 
     return dict(recording=rec, cohort=info["cohort"], genotype=info["genotype"], age_weeks=info["age_weeks"],
                 verdict=verdict, checks=checks, signals=signals, live=live)
@@ -358,6 +363,16 @@ def render_banner(rep):
         if s.get("b2b_n_guard_seed") or s.get("b2b_n_guard_hr"):
             row("", f"{s.get('b2b_n_guard_seed', 0) + s.get('b2b_n_guard_hr', 0)} period(s) dropped by the 750 bpm guard "
                     f"(non-cardiac ~800 bpm line)")
+    if "rate_n_periods" in s:
+        row("Rate-level HR (RATE.md)",
+            (f"{s['rate_hr_median_bpm']:.0f} bpm median over {s['rate_covered_min']} min of 2 s values "
+             f"({s['rate_beats_min']} from beats, {s['rate_curve_min']} from the rate tracker)"
+             + (f"; {100 * s['rate_covered_clean_frac']:.0f}% of clean breathing"
+                if s.get("rate_covered_clean_frac") is not None else "")
+             if s.get("rate_hr_median_bpm") is not None else
+             f"none: no beats and none of the {s['rate_n_periods']} tracker periods is trusted"))
+        if s.get("rate_tracker_snr_verdict") == "LOW":
+            row("", "rate tracker: LOW heart SNR (under half the still minutes clear -3 dB; only ok/strong periods used)")
 
     # the reasons, worst first
     ordered = sorted(rep["checks"], key=lambda c: -_LEVELS[c["level"]])

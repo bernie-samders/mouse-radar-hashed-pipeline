@@ -27,14 +27,20 @@ import azimuth_motion      # noqa: E402
 import apnea               # noqa: E402
 import hr                  # noqa: E402
 import b2b                 # noqa: E402
+import hr_curve            # noqa: E402
+import rate                # noqa: E402
 import qc                  # noqa: E402
 
 # The ordered list of METRIC pipelines that `run.py all` executes.  Register new ones here.
-PIPELINES = [stettner, pause_distribution, azimuth_motion, apnea, hr, b2b]   # b2b needs hr's outputs
+PIPELINES = [stettner, pause_distribution, azimuth_motion, apnea, hr, b2b, rate]   # b2b needs hr's outputs; rate b2b's
+
+# Runnable on their own (`python run.py <name> ...`) but NOT part of `run.py all`. hr_curve is the rate tracker; `rate`
+# runs it with the paper's settings (>= 6 s periods, continuity band) inside <out>/metrics/rate_tracker/.
+EXTRA = [hr_curve]
 
 # The quality-control step.  `run.py all` runs it LAST -- after every metric pipeline -- so it can fold
 # their outputs into its verdict and print the headline PASS/REVIEW/FAIL banner as the final thing on
 # screen.  It is also runnable on its own (`python run.py qc --rec <name>`) to re-check a recording.
 QC = qc
 
-REGISTRY = {m.NAME: m for m in PIPELINES + [QC]}
+REGISTRY = {m.NAME: m for m in PIPELINES + EXTRA + [QC]}

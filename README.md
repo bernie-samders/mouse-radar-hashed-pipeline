@@ -1,7 +1,7 @@
 # mouse_radar_pipeline
 
 A **barebones, self-contained** toolkit to turn one raw mouse radar experiment (a TI-radar `*_voxels.f32`
-power cube, e.g. a folder on the `G:\` drive) into breathing, heart-rate and motion metrics. It does eight things:
+power cube, e.g. a folder on the `G:\` drive) into breathing, heart-rate and motion metrics. It does nine things:
 
 1. **Segment** the recording into breaths and end-expiratory pauses with the **two-template DP** method,
    and save the segmentation (the `segments` substrate) so everything else reads from cache.
@@ -19,14 +19,19 @@ power cube, e.g. a folder on the `G:\` drive) into breathing, heart-rate and mot
    beat Viterbi), the heart-rate method the paper reports: 96.8 % of 2 s bins within 5 % of the ECG, beat intervals
    within 1.6 ms (median), and it abstains where the heart is weak. Runs after `hr`; periods seeded or read above
    750 bpm are not reported. **See [`B2B.md`](B2B.md)** before using the numbers.
-   (The 1.4–1.6 `hr_curve` step, a 25 Hz heart-rate curve, was removed in 1.7: b2b replaces it.)
-8. **Quality control** — after everything above is recomputed **from the stored voxels**, a plain-English
+8. **Rate-level heart rate** (new in 1.8) — a 2 s heart-rate value wherever b2b timed the beats **or** the rate
+   tracker gives a trustworthy value, so it covers more of the clean breathing than b2b alone. The rate tracker is the
+   `hr_curve` step of versions 1.4–1.6 (removed in 1.7, back in 1.8 with its code unchanged), run on still periods of
+   6 s or more with the continuity band; a period counts only if its heart SNR is above −3 dB and its heart rate is at
+   most 750 bpm. This is the paper's "rate level"; b2b is its "beat level". **See [`RATE.md`](RATE.md)** before using
+   the numbers.
+9. **Quality control** — after everything above is recomputed **from the stored voxels**, a plain-English
    `PASS` / `REVIEW` / `FAIL` verdict on whether the recording is analyzable. It judges the *reprocessed*
    signal, **not** the live-capture summary, so it stops failing perfectly good (active/sick) recordings.
    **See [`QC.md`](QC.md) for the collaborator-facing explanation** of what changed and why.
 
 **July-2026 captures (new in 1.5).** The live-capture build used in July 2026 steps every voxel at each 4.264 s capture
-file and sometimes drops single frames, which hides the heart from steps 6 and 7. `all`, `hr` and `b2b` now check
+file and sometimes drops single frames, which hides the heart from steps 6 to 8. `all`, `hr`, `b2b` and `rate` check
 every cube and, when it has these artifacts, run the heart-rate steps on a repaired copy (`--dejump auto`, the default).
 **See [`DEJUMP.md`](DEJUMP.md).**
 
@@ -87,6 +92,10 @@ Outputs land under `outputs/` (override with `--out DIR`):
 | `outputs/metrics/<rec>.b2b_bins.csv` | the 2 s heart-rate values inside the tracked periods |
 | `outputs/metrics/<rec>.b2b_periods.csv` | one row per still period: tracked or why not (`abstain_reason`), SNR, beats, heart rate |
 | `outputs/metrics/<rec>.b2b_beats.csv` / `.b2b.npz` | every beat time (s) of the tracked periods, with interval and heart rate |
+| `outputs/metrics/<rec>.rate.csv` / `.json` | rate-level summary (one row: median of the 2 s values, covered minutes split into beats / rate tracker, share of clean breathing covered, tracker periods used or dropped; see RATE.md) |
+| `outputs/metrics/<rec>.rate_bins.csv` | the rate-level 2 s heart-rate values, each with its source (`beats` or `curve`) |
+| `outputs/metrics/<rec>.rate_periods.csv` | one row per still period of 6 s or more: used by the rate level or why not (`reason`) |
+| `outputs/metrics/rate_tracker/<rec>.hr*` | the rate tracker's own run: `hr` on the ≥ 6 s periods and `hr_curve` with the continuity band (the files HEART_RATE.md / HR_CURVE.md describe, kept apart from the default `hr` outputs) |
 | `outputs/metrics/<rec>.dejump.json` / `.csv` | July-2026 capture-artifact check: file-step grid, steps / dropped frames per minute, repaired or not (see DEJUMP.md) |
 | `outputs/dejumped/<experiment folder>/` | the repaired cube copy the heart-rate steps read (range bins 50–82; deleted after `all` unless `--keep-dejumped`) |
 | `outputs/metrics/<rec>.qc.json` / `.csv` | QC verdict (`PASS`/`REVIEW`/`FAIL`) + reasons + the signals it checked |
@@ -107,6 +116,10 @@ python run.py hr       --rec NAME [--exp DIR] [--seg DIR] [--out DIR] [--workers
                        [--patch-beams A-B] [--min-period-s S] [--dejump auto|on|off]
 python run.py b2b      --rec NAME [--exp DIR] [--seg DIR] [--out DIR] [--workers N]   # after hr (see B2B.md)
                        [--dejump auto|on|off]
+python run.py rate     --rec NAME [--exp DIR] [--seg DIR] [--out DIR] [--workers N]   # after b2b (see RATE.md)
+                       [--dejump auto|on|off]
+python run.py hr_curve --rec NAME [--exp DIR] [--seg DIR] [--out DIR] [--workers N]   # the rate tracker alone, on hr's
+                       [--band bspec|continuity] [--dejump auto|on|off]              # periods; not part of `all`
 python run.py dejump   --exp DIR  [--out DIR] [--bins hr|all|LO-HI] [--detect-only]  # July-2026 cube repair (DEJUMP.md)
 python run.py qc       --rec NAME [--seg DIR] [--out DIR]     # re-check one recording's QC verdict
 python run.py combine  [--out DIR]
@@ -122,14 +135,14 @@ breaths/min, and then every breathing metric and the heart rate run on a half-ra
 segmentation (`engine/breath_check.py`: spectral rate vs counted rate). If it is halved, they re-segment with the fast
 bounds 0.12–0.21 s, keep the halved one in `outputs/segments/default_bounds/`, and record the check in the segments
 json (`breath_check`). `--breath-bounds default` disables this. If a halved segmentation is used anyway, `hr` /
-`b2b` warn (`breathing_halved`) and QC flags *REVIEW*.
+`b2b` / `rate` warn (`breathing_halved`) and QC flags *REVIEW*.
 *New in 1.6:* a breather just above the default bounds' reach is not halved but **clipped**: the segmenter squeezes its
 breaths against the 0.20 s minimum. ng511 on 10-21 breathed at 267/min, was counted at 250/min, and had 30 % of its
 breath motions at the bound (normal mice 1–3 %). A segmentation with ≥ 15 % of clean-run breath motions at the minimum
 and a spectral rate ≥ 240/min is re-segmented with the fast bounds the same way, and QC flags it *REVIEW* if it is used
 anyway (`breathing_clipped`).
 
-**July-2026 captures.** With `--dejump auto` (default), `all` / `hr` / `b2b` read the cube once (~1 min per 10 GB),
+**July-2026 captures.** With `--dejump auto` (default), `all` / `hr` / `b2b` / `rate` read the cube once (~1 min per 10 GB),
 cache the result in `<rec>.dejump.json`, and if the cube has the July file-step grid or ≥ 1 dropped frame per minute,
 run the heart-rate steps on a repaired copy in `outputs/dejumped/`. Everything else uses the raw cube. `on` repairs
 whenever any jump is found, `off` never. See [`DEJUMP.md`](DEJUMP.md).
@@ -158,6 +171,12 @@ minutes — handy for a quick smoke test; leave it off for the real run.
             │               │                            │                          │          (hr's periods + patch:
             │               │                            │                          │           matched filter + beat
             │               │                            │                          │           Viterbi -> beat times)
+            │               │                            │                          │                    ▼
+            │               │                            │                          │          pipelines/rate
+            │               │                            │                          │          (hr on periods >= 6 s +
+            │               │                            │                          │           hr_curve, continuity band;
+            │               │                            │                          │           2 s values: beats, else
+            │               │                            │                          │           the trusted curve)
             └───────────────┴───────────────────────────┴──────────────────────────┴────────────────────┘
                             ▼
                    outputs/metrics/<rec>.*   →   combine → combined_*.csv
@@ -173,7 +192,7 @@ segment-based metric.
 ## Layout / module map
 
 ```
-run.py                        top-level CLI (segment | stettner | pauses | motion | apnea | all | combine | list)
+run.py                        top-level CLI (all | segment | stettner | pauses | motion | apnea | hr | b2b | rate | qc | combine | list)
 requirements.txt
 engine/                       the reusable radar signal-processing core (numpy/scipy/numba only)
   voxel_store.py              read the raw *_voxels.f32 cube (vendored 10-line memmap reader) + load_experiment
@@ -194,6 +213,7 @@ engine/                       the reusable radar signal-processing core (numpy/s
   hr_bands.py                 HR plumbing: still periods, chest patch, acceleration, lazy heartbeat-band segmentation
   beatseg.py                  EQ-Radio heartbeat segmentation (numba DP + template update, multi-start)
   b2b_beats.py                the FROZEN beat-to-beat tracker (byte-identical to the validated file; sha256 checked)
+  pll_tracker/                the FROZEN rate tracker `pll` (6 research files byte-identical, sha256 checked; + bh.py shim)
 pipelines/                    the analyses (each is one file; add your own here)
   __init__.py                 the PIPELINES registry
   stettner.py                 [segments]  Stettner (2007) breathing metrics
@@ -202,11 +222,15 @@ pipelines/                    the analyses (each is one file; add your own here)
   apnea.py                    [segments + raw]  apnea count / rate per clean-breathing minute (see APNEA.md)
   hr.py                       [segments + raw]  heart rate per still, regular-breathing period (see HEART_RATE.md)
   b2b.py                      [segments + raw]  beat-to-beat heart rate within each of hr's periods (see B2B.md)
+  rate.py                     [segments + raw]  rate-level heart rate: b2b's beats, else the rate tracker (see RATE.md)
+  hr_curve.py                 [segments + raw]  the rate tracker (25 Hz curve per period; run by rate.py, see HR_CURVE.md)
   qc.py                       [segments]  quality-control verdict (PASS/REVIEW/FAIL) from the reprocessed signal
 QC.md                         collaborator-facing: why QC moved off the live-capture numbers, and how to read a verdict
 APNEA.md                      collaborator-facing: the apnea metric, its WBP validation, and what to watch for
 HEART_RATE.md                 collaborator-facing: the heart-rate method, its ECG validation, and what to watch for
 B2B.md                        collaborator-facing: beat-to-beat heart rate, its ECG validation, the high-HR guard
+RATE.md                       collaborator-facing: the rate level (beats, else the rate tracker), its ECG checks, caveats
+HR_CURVE.md                   the rate tracker itself (the 1.4-1.6 hr_curve step): heart-SNR grades, method, ECG scores
 DEJUMP.md                     collaborator-facing: the July-2026 capture artifacts, the repair, its validation, caveats
 docs/                         validation figures: radar heart rate vs implanted ECG on mice 508 and 507 day 2
 outputs/                      created at run time (segments/ + metrics/); safe to delete/regenerate
@@ -295,6 +319,10 @@ why the toolkit is "per-experiment metrics" and **not** a genotype test.
   in `HEART_RATE.md`.
 - **Beat-to-beat heart rate** (`b2b`): reports only where the heart is clearly visible (abstains elsewhere);
   use tracked periods only, and successive-difference HRV only at `snr` >= 2.3. Full list in `B2B.md`.
+- **Rate-level heart rate** (`rate`): covers more than `b2b`, with larger errors (8 ECG sessions: 94 % of 2 s values
+  within 5 % of the ECG, 1.4 % more than 10 % off; above 600 bpm far fewer are within 5 %). The tracker's settings were
+  chosen with the ECG of some of those sessions in view, and its SNR grade alone does not prove a value is the heart.
+  Use it for heart-rate level, never for beat-to-beat HRV. Full list in `RATE.md`.
 - **Motion**: mutants are hypoactive (`azimuth_path_deg_per_min` lower); this is a confound to regress out
   of other metrics, and a phenotype in its own right.
 
@@ -317,8 +345,12 @@ why the toolkit is "per-experiment metrics" and **not** a genotype test.
   `harness` (= `engine/harness.py`, the data adapter) by its research name. `hr_bands.py` / `beatseg.py` are ports of
   the research runner (`radar_hr/hr_core.py`) and EQ-Radio beat segmentation, checked identical on 508 / 507 day 2.
   The HR step runs one worker process per period with 1 BLAS thread each (as validated; more threads oversubscribe).
-- 1.7 removed `hr_curve` (the pll particle-filter curve, `engine/pll_tracker/`); b2b does not use it. Its research
-  code is in `output/ng511_hr/b2b/pll/` and in git history (package 1.6, commit 5cabab8).
+- 1.7 removed `hr_curve` (the pll particle-filter curve, `engine/pll_tracker/`); 1.8 put it back unchanged: the eight
+  files (`engine/pll_tracker/*`, `pipelines/hr_curve.py`) are the package 1.6 blobs (commit 5cabab8), and
+  `pipelines/hr_curve.py` checks the six research files' sha256 on every run. b2b does not use it. `pipelines/rate.py`
+  (new in 1.8) runs `hr` with a 6 s period floor and `hr_curve` with the continuity band into
+  `outputs/metrics/rate_tracker/`, then merges the trusted curve with b2b's 2 s values. `hr_curve` is in
+  `pipelines.EXTRA`: runnable alone, not part of `all`. Never edit the tracker files.
 - `engine/b2b_beats.py` is the frozen beat tracker, **byte-identical** (CRLF bytes) to the research release
   (`output/ecg_0928/hr_overnight/short_runs/b2b/elegant/release/`); `pipelines/b2b.py` checks its sha256 and reads
   the `hr` step's `<rec>.hr.json`, so `hr` must run first. Never edit it.
@@ -326,7 +358,7 @@ why the toolkit is "per-experiment metrics" and **not** a genotype test.
   sample short); identical samples whenever the old length was right.
 - `engine/dejump.py` is a port of the research tool `output/july_dejump/dejump_cube.py` (same constants and arithmetic),
   checked byte-identical on a July (Animal_B_1) and a step-free (B16) cube. It only writes a repaired COPY for the
-  heart-rate steps; `run.py` hands that copy to the pipelines with `DEJUMP = True` (`hr`, `b2b`) and the raw cube
+  heart-rate steps; `run.py` hands that copy to the pipelines with `DEJUMP = True` (`hr`, `b2b`, `rate`) and the raw cube
   to everything else. The copy's per-voxel level is arbitrary (positivity constant), so never feed it to level-based
   pipelines.
 - To validate a change without `G:\`, run the metric pipelines against an existing substrate directory via

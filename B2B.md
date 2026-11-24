@@ -2,7 +2,9 @@
 
 **Short version:** `b2b` (new in version 1.7) finds the individual heartbeats inside every still, regular-breathing
 period that the `hr` step scores, and reports each beat's time and the heart rate from the beat intervals. It is the
-heart-rate method the paper reports. It runs automatically after `hr` in `python run.py all`, or on its own:
+heart-rate method the paper reports as its beat level. (The paper's rate level is the `rate` step, new in 1.8: these
+values plus a rate tracker where b2b abstains; see [`RATE.md`](RATE.md).) It runs automatically after `hr` in
+`python run.py all`, or on its own:
 
 ```bash
 python run.py b2b --rec <recording_name> [--exp <raw_experiment_dir>] [--workers N]   # after hr
@@ -56,7 +58,9 @@ A period is **not reported** when its seed or its b2b heart rate is above **750 
 
 ## Read before using the numbers
 
-- **Use only tracked periods.** An abstained period has no heart rate; do not fill it from `hr`.
+- **Use only tracked periods.** An abstained period has no heart rate; do not fill it from `hr`. The `rate` step
+  (RATE.md) gives a heart rate in some of those periods from a separate rate tracker; that is a different, less
+  accurate level and carries no beat times.
 - **Successive-difference HRV** (RMSSD, pNN) is valid only at `snr` ≥ 2.3; between 2.0 and 2.3 beat jitter inflates
   RMSSD about 1.6×.
 - **Halved breathing** (`breathing_halved`, see the README): a breathing harmonic can pass for a heartbeat, so ignore

@@ -11,9 +11,9 @@ into a spike that buries the heart. On raw July cubes the heart signal disappear
 rates are off by about 60 beats/min.
 
 Version 1.5 removes the jumps from a copy of the cube before the heart-rate steps. **It is automatic:** `run.py all`,
-`hr` and `b2b` check every cube and repair it only when it has the July artifacts. On our July cohort, 14 of the
-20 recordings with still periods then passed the heart-SNR check (of the 1.5–1.6 `hr_curve` step, removed in 1.7);
-before the repair, none of the 7 we tested did.
+`hr`, `b2b` and `rate` check every cube and repair it only when it has the July artifacts. On our July cohort, 14 of
+the 20 recordings with still periods then passed the heart-SNR check of the `hr_curve` step (1.5–1.6; since 1.8 the
+rate tracker inside `rate`); before the repair, none of the 7 we tested did.
 Captures from 08-06 on have no step and run on the raw cube, unchanged.
 
 ---
@@ -84,7 +84,8 @@ recording, the chest-patch version fires about 70 times while the mouse moves, t
 
 ## How well it works
 
-Measured in 1.5 with `hr` and the heart-SNR check of the `hr_curve` step (removed in 1.7).
+Measured in 1.5 with `hr` and the heart-SNR check of the `hr_curve` step (since 1.8 the rate tracker inside `rate`,
+which also reads the repaired copy).
 
 | test | result |
 |---|---|

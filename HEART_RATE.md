@@ -13,7 +13,9 @@ version 1.5 this step repairs them automatically on a copy of the cube before it
 
 **For individual beats, heart rate within a period, and the heart rate the paper reports**, use the `b2b` step (new in version 1.7; see
 [`B2B.md`](B2B.md)). It also runs after this one, seeded with this step's period heart rate, and abstains where the
-heart is weak.
+heart is weak. **For heart rate over more of the recording**, use the `rate` step (new in version 1.8; see
+[`RATE.md`](RATE.md)): b2b's values plus a rate tracker on still periods of 6 s or more. It runs this step a second time
+with a 6 s floor; those files are in `outputs/metrics/rate_tracker/` and do not replace the ones described here.
 
 ---
 
